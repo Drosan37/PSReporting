@@ -1,0 +1,42 @@
+<ConfigFile>
+	<LogInfo>
+		<FileName>ReportError.log</FileName>
+	</LogInfo>
+	<SourceList>
+		<FileName>InstancesList.txt</FileName>		
+	</SourceList>	
+	<DestInstance>
+		<ServerName>[ServerDBName]</ServerName>
+		<DatabaseName>[DBName]</DatabaseName>		
+	</DestInstance>
+	<DataGathering>	
+		<Type>
+			<Name>Filegroups</Name>
+			<Query>ED_Filegroups.sql</Query>
+			<TableDest>DBREP.TB_Filegroups</TableDest>
+			<DeleteOld>false</DeleteOld>
+		</Type>	
+		<Type>
+			<Name>Instances</Name>
+			<Query>Instances.sql</Query>
+			<TableDest>DBREP.TB_Instances</TableDest>
+			<DeleteOld>true</DeleteOld>
+		</Type>	
+		<Type>
+			<Name>Databases</Name>
+			<Query>Databases.sql</Query>
+			<TableDest>DBREP.TB_Databases</TableDest>
+			<DeleteOld>true</DeleteOld>
+		</Type>		
+		<Type>
+			<Name>Objects</Name>
+			<Query>ED_Objects.sql</Query>
+			<TableDest>DBREP.TB_Objects</TableDest>
+			<DeleteOld>true</DeleteOld>
+		</Type>		
+	</DataGathering>
+</ConfigFile>
+
+
+
+
