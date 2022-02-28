@@ -28,6 +28,7 @@ $strLogFile = ("{0}\{1}" -f $strLogPath, $strLogFileName)
 # Create Dataset
 $objDataset = New-Object System.Data.DataSet
 
+# Volume Space
 # Create DataTable for input data
 $objDTVolumes = New-Object System.Data.DataTable("VolumesSpace")
 
@@ -37,6 +38,19 @@ $objDTVolumes.columns.Add( (New-Object System.Data.DataColumn "ServerName") )
 $objDTVolumes.columns.Add( (New-Object System.Data.DataColumn "DiskName") )
 $objDTVolumes.columns.Add( (New-Object System.Data.DataColumn "Size") )
 $objDTVolumes.columns.Add( (New-Object System.Data.DataColumn "FreeSpace") )
+
+# Services
+# Create DataTable for input data
+$objDTServices = New-Object System.Data.DataTable("ServicesStatus")
+
+# Set DataColumns for DataTable
+$objDTServices.columns.Add( (New-Object System.Data.DataColumn "RegDate") )
+$objDTServices.columns.Add( (New-Object System.Data.DataColumn "ServerName") )
+$objDTServices.columns.Add( (New-Object System.Data.DataColumn "ServiceName") )
+$objDTServices.columns.Add( (New-Object System.Data.DataColumn "DisplayName") )
+$objDTServices.columns.Add( (New-Object System.Data.DataColumn "Status") )
+$objDTServices.columns.Add( (New-Object System.Data.DataColumn "StartMode") )
+$objDTServices.columns.Add( (New-Object System.Data.DataColumn "LogonAccount") )
 
 # Open connection with destination database
 $objSqlConnDest = OpenConnection -ServerName $objXmlConf.ConfigFile.DestInstance.ServerName -DatabaseName $objXmlConf.ConfigFile.DestInstance.DatabaseName
@@ -55,37 +69,65 @@ foreach($strRow in $arrServersList)
 		
 	try
 	{			
+        # -- Volumes Space --    
         # Execute WMI query for check Volumes
-		$objWmi = Get-WmiObject -Namespace "root\cimv2" -ComputerName $strServerName -Class Win32_LogicalDisk | 
+		$objWmiVolumes = Get-WmiObject -Namespace "root\cimv2" -ComputerName $strServerName -Class Win32_LogicalDisk | 
 			select Name, @{LABEL='Size(GB)';EXPRESSION={"{0:N2}" -f ($_.Size/1GB)} } , @{LABEL='FreeSpace(GB)';EXPRESSION={"{0:N2}" -f ($_.FreeSpace/1GB)} }, DriveType | Sort-Object Name	
 
 		#DEBUG
-		Write-Debug $objWmi.Count  
+		Write-Debug $objWmiVolumes.Count  
         		
 		#Cycle for output
-		foreach($strDisk in $objWmi)
+		foreach($objDisk in $objWmiVolumes)
 		{
             # Check if disk is not removable
-            if($strDisk.DriveType -ne 5)
+            if($objDisk.DriveType -ne 5)
             {
                 # Output
-                Write-Host ("{0} - {1} - {2} - {3}" -f $strServername, $strDisk.Name, $strDisk."Size(GB)", $strDisk."FreeSpace(GB)") 
+                Write-Host ("{0} - {1} - {2} - {3}" -f $strServername, $objDisk.Name, $objDisk."Size(GB)", $objDisk."FreeSpace(GB)") 
             
                 # Set new row
-                $objDRow = $objDTVolumes.NewRow()
+                $objDRowVolumes = $objDTVolumes.NewRow()
             
                 # Add values to row
-                $objDRow.RegDate = Get-Date
-                $objDRow.ServerName = $strServername
-                $objDRow.DiskName = $strDisk.Name
-                $objDRow.Size = $strDisk."Size(GB)"
-                $objDRow.FreeSpace = $strDisk."FreeSpace(GB)"
+                $objDRowVolumes.RegDate = Get-Date
+                $objDRowVolumes.ServerName = $strServername
+                $objDRowVolumes.DiskName = $objDisk.Name
+                $objDRowVolumes.Size = $objDisk."Size(GB)"
+                $objDRowVolumes.FreeSpace = $objDisk."FreeSpace(GB)"
 
                 # Add row
-                $objDTVolumes.Rows.Add($objDRow)
+                $objDTVolumes.Rows.Add($objDRowVolumes)
             }
 		}
 
+        # -- Services Status --
+        # Execute WMI query for check services
+		$objWmiServices = Get-WmiObject -Namespace "root\cimv2" -ComputerName $strServerName -Class Win32_Service | 
+			select Name, DisplayName, State, StartMode, StartName | 
+            Where-Object { ($_.DisplayName -like "SQL Server*")} | Sort-Object Name	
+
+        #Cycle for output
+		foreach($objService in $objWmiServices)
+		{
+            # Output
+            Write-Host ("{0} - {1} - {2} - {3} - {4} - {5}" -f $strServername, $objService.Name, $objService.DisplayName, $objService.State, $objService.StartMode, $objService.StartName)
+            
+            # Set new row
+            $objDRowServices = $objDTServices.NewRow()
+
+            # Add values to row
+            $objDRowServices.RegDate = Get-Date
+            $objDRowServices.ServerName = $strServername
+            $objDRowServices.ServiceName = $objService.Name
+            $objDRowServices.DisplayName = $objService.DisplayName
+            $objDRowServices.Status = $objService.State
+            $objDRowServices.StartMode = $objService.StartMode
+            $objDRowServices.LogonAccount = $objService.StartName
+
+            # Add row
+            $objDTServices.Rows.Add($objDRowServices)             
+		}        
 	}
 	catch
 	{
@@ -98,14 +140,20 @@ foreach($strRow in $arrServersList)
 
 try
 {
+    # -- Clean tables --
     # Define command text for delete old rows
-    $strDelCommand = ("TRUNCATE TABLE {0}" -f "DBREP.TB_VolumesSpaces")
+    $strDelCommand = ("TRUNCATE TABLE {0}; TRUNCATE TABLE {1};" -f "DBREP.TB_VolumesSpaces", "DBREP.TB_Services")
 
     # Execute query for delete
     ExecuteNonQuery -SqlConnection $objSqlConnDest -CommandText $strDelCommand
 
+    # -- Volumes Space --
     # Call method for insert data
     ExecuteBulk -SqlConnection $objSqlConnDest -DataTable $objDTVolumes -DestTableName "DBREP.TB_VolumesSpaces"
+
+    # -- Services --
+    # Call method for insert data
+    ExecuteBulk -SqlConnection $objSqlConnDest -DataTable $objDTServices -DestTableName "DBREP.TB_Services"
 }
 catch
 {
