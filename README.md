@@ -3,4 +3,4 @@ Powershell project for gathering information on Database SQL Server and OS Infor
 
 This project is used for build report on SQL Server Database Environment.
 
-In my projects I used Grafana for make report.
+In this project the output could be insert into SQL Server database or in CSV output
